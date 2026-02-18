@@ -1,0 +1,7 @@
+requests>=2.28
+beautifulsoup4>=4.11
+feedparser>=6.0
+arxiv>=2.0
+python-dateutil
+markdown
+deep-translator>=3.4
