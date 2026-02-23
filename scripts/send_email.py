@@ -224,6 +224,8 @@ def send_report_email(report_path=None):
         return False
 
 
+import sys
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -235,3 +237,4 @@ if __name__ == "__main__":
         print("\n✅ 이메일 발송 완료!")
     else:
         print("\n⚠️ 이메일 발송 실패 - 보고서는 파일로 저장되었습니다.")
+        sys.exit(1)
