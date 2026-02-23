@@ -171,11 +171,11 @@ def generate_llm_summary(text, title=None):
         if GEMINI_API_KEY:
             client = genai.Client(api_key=GEMINI_API_KEY)
             response = client.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-2.5-flash',
                 contents=prompt
             )
             logger.info("✅ Gemini API 심층 요약 완료")
-            time.sleep(4) # Rate limit 방지 (15 RPM)
+            time.sleep(13) # Rate limit 방지 (5 RPM)
             return response.text.strip()
             
         # 2순위: OpenAI (설치된 경우)
@@ -354,13 +354,19 @@ def format_date_str(date_str):
 # ──────────────────────────────────────────────
 # 보고서 생성
 # ──────────────────────────────────────────────
-def generate_report(articles, papers):
+def generate_report(articles_all, papers_all):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    top_articles, top_papers = select_top_items(articles, papers)
+    
+    logger.info(f"분석 대상: 기사 10건, 논문 5건")
+    # 국내 비중 30% 보장 로직을 위해 전체 목록에서 선별
+    articles = select_top_items(articles_all, top_n=10, kr_ratio=0.3)
+    papers = select_top_items(papers_all, top_n=5, kr_ratio=0.0)
+    
+    analyzed_articles = []
+    all_items = articles + papers
+    logger.info(f"분석 대상: 기사 {len(articles)}건, 논문 {len(papers)}건")
     
     detail_map = {}
-    all_items = top_articles + top_papers
-    logger.info(f"분석 대상: 기사 {len(top_articles)}건, 논문 {len(top_papers)}건")
     
     for idx, item in enumerate(all_items, 1):
         title = item.get("title", "")
