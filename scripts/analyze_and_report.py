@@ -145,10 +145,11 @@ def fetch_article_fulltext(url):
 # LLM 지원 설정
 try:
     from google import genai
-    from config import GEMINI_API_KEY, OPENAI_API_KEY
+    from config import GEMINI_API_KEY, OPENAI_API_KEY, CLAUDE_API_KEY
 except ImportError:
     GEMINI_API_KEY = ""
     OPENAI_API_KEY = ""
+    CLAUDE_API_KEY = ""
 
 def generate_llm_summary(text, title=None):
     """LLM을 사용하여 기사의 심층 핵심 요약을 생성합니다."""
@@ -167,35 +168,61 @@ def generate_llm_summary(text, title=None):
 - 첫 문장은 가장 중요한 핵심 결론으로 시작하세요.
 """
     try:
-        # 1순위: Gemini
+        # 1순위: Gemini (Google)
         if GEMINI_API_KEY:
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt
-            )
-            logger.info("✅ Gemini API 심층 요약 완료")
-            time.sleep(13) # Rate limit 방지 (5 RPM)
-            return response.text.strip()
-            
-        # 2순위: OpenAI (설치된 경우)
-        elif OPENAI_API_KEY:
-            import openai
-            client = openai.OpenAI(api_key=OPENAI_API_KEY)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "당신은 시니어 광고 기획자이자 트렌드 분석가입니다."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=300,
-                temperature=0.5
-            )
-            logger.info("✅ OpenAI API 심층 요약 완료")
-            time.sleep(1)
-            return response.choices[0].message.content.strip()
+            try:
+                client = genai.Client(api_key=GEMINI_API_KEY)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+                logger.info("✅ Gemini API 심층 요약 완료")
+                time.sleep(13) # Rate limit 방지 (5 RPM)
+                return response.text.strip()
+            except Exception as e:
+                logger.warning(f"⚠️ Gemini 요약 실패, 다음 LLM으로 전환 시도: {e}")
+                
+        # 2순위: Claude (Anthropic)
+        if CLAUDE_API_KEY:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+                response = client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=300,
+                    system="당신은 시니어 광고 기획자이자 트렌드 분석가입니다.",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                logger.info("✅ Claude API 심층 요약 완료")
+                time.sleep(1)
+                return response.content[0].text.strip()
+            except Exception as e:
+                logger.warning(f"⚠️ Claude 요약 실패, 다음 LLM으로 전환 시도: {e}")
+                
+        # 3순위: OpenAI (ChatGPT)
+        if OPENAI_API_KEY:
+            try:
+                import openai
+                client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "당신은 시니어 광고 기획자이자 트렌드 분석가입니다."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=300,
+                    temperature=0.5
+                )
+                logger.info("✅ OpenAI API 심층 요약 완료")
+                time.sleep(1)
+                return response.choices[0].message.content.strip()
+            except Exception as e:
+                logger.warning(f"⚠️ OpenAI 요약 실패: {e}")
+                
     except Exception as e:
-        logger.warning(f"❌ LLM 요약 실패, 기본 요약으로 대체: {e}")
+        logger.warning(f"❌ 모든 LLM 요약 실패, 기본 요약으로 대체: {e}")
     return None
 
 
