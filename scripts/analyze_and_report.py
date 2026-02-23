@@ -299,46 +299,45 @@ def relevance_score(item):
     return score
 
 
-def select_top_items(articles, papers):
-    articles_sorted = sorted(articles, key=lambda x: -relevance_score(x))
-    papers_sorted = sorted(papers, key=lambda x: -relevance_score(x))
+def select_top_items(items, top_n=10, kr_ratio=0.3):
+    items_sorted = sorted(items, key=lambda x: -relevance_score(x))
     
-    final_articles = []
+    if kr_ratio == 0:
+        return items_sorted[:top_n]
+        
+    final_items = []
     source_counts = {}
     
-    # 목표 기사 수: 12~15개
-    target_count = 12
-    kr_target = int(target_count * 0.3)  # 약 4개
+    kr_target = int(top_n * kr_ratio)
     
-    kr_articles = [a for a in articles_sorted if a.get("region") == "kr"]
-    global_articles = [a for a in articles_sorted if a.get("region") != "kr"]
+    kr_items = [a for a in items_sorted if a.get("region") == "kr"]
+    global_items = [a for a in items_sorted if a.get("region") != "kr"]
     
     # 국내 기사 먼저 확보
-    for a in kr_articles:
+    for a in kr_items:
         s = a.get("source", "unknown")
         if source_counts.get(s, 0) >= 3: continue
-        final_articles.append(a)
+        final_items.append(a)
         source_counts[s] = source_counts.get(s, 0) + 1
-        if len(final_articles) >= kr_target: break
+        if len(final_items) >= kr_target: break
         
     # 나머지 해외 기사로 채움
-    for a in global_articles:
+    for a in global_items:
         s = a.get("source", "unknown")
         if source_counts.get(s, 0) >= 3: continue
-        final_articles.append(a)
+        final_items.append(a)
         source_counts[s] = source_counts.get(s, 0) + 1
-        if len(final_articles) >= target_count: break
+        if len(final_items) >= top_n: break
     
     # 여전히 부족하면 국내로 변통 시도
-    if len(final_articles) < target_count:
-        for a in [art for art in kr_articles if art not in final_articles]:
-            final_articles.append(a)
-            if len(final_articles) >= target_count: break
+    if len(final_items) < top_n:
+        for a in [art for art in kr_items if art not in final_items]:
+            final_items.append(a)
+            if len(final_items) >= top_n: break
 
     # 관련도 순으로 재정렬
-    final_articles.sort(key=lambda x: -relevance_score(x))
-    final_papers = papers_sorted[:8]
-    return final_articles, final_papers
+    final_items.sort(key=lambda x: -relevance_score(x))
+    return final_items
 
 
 def format_date_str(date_str):
