@@ -152,14 +152,19 @@ except ImportError:
 
 def generate_llm_summary(text, title=None):
     """LLM을 사용하여 기사의 심층 핵심 요약을 생성합니다."""
-    prompt = f"""다음은 광고/마케팅 업계 기사 원문(또는 요약본)입니다.
+    prompt = f"""당신은 글로벌 탑티어 광고대행사의 시니어 마케팅 트렌드 분석가입니다.
+다음은 해외 및 국내 광고/마케팅/미디어 업계 최신 기사 원문(또는 요약본)입니다.
+
 제목: {title if title else '없음'}
 원문:
 {text}
 
-이 기사를 바탕으로, 광고대행사 기획자(AE)나 마케터가 실무에 참고할 수 있도록 가장 중요한 핵심 내용과 시사점을 3~4문장으로 한국어로 심층 요약해주세요. 
-직역투가 아닌 자연스러운 비즈니스 한국어를 사용하고, 기사의 단순 요약을 넘어 '이것이 왜 중요한지(인사이트)'가 드러나도록 작성해주세요. 
-'-습니다/입니다' 체를 사용해주세요.
+[요청 사항]
+이 기사를 읽고, 바쁜 C레벨 임원이나 실무 기획자(AE)가 즉시 핵심을 파악할 수 있도록 한국어로 심층 요약해주세요.
+- 불필요한 도입부나 직역투(예: "이 기사는 ~을 다룹니다")는 절대 금지합니다.
+- 단순 사실 전달을 넘어 '이 현상이 왜 중요한지(인사이트)'와 '광고/마케팅 업계에 미칠 영향'이 명확히 드러나게 3~4문장으로 압축하세요.
+- 매끄럽고 세련된 비즈니스 한국어('-습니다/입니다' 체)를 사용하세요.
+- 첫 문장은 가장 중요한 핵심 결론으로 시작하세요.
 """
     try:
         # 1순위: Gemini
@@ -169,6 +174,7 @@ def generate_llm_summary(text, title=None):
                 model='gemini-2.5-flash',
                 contents=prompt
             )
+            logger.info("✅ Gemini API 심층 요약 완료")
             return response.text.strip()
             
         # 2순위: OpenAI (설치된 경우)
@@ -184,9 +190,10 @@ def generate_llm_summary(text, title=None):
                 max_tokens=300,
                 temperature=0.5
             )
+            logger.info("✅ OpenAI API 심층 요약 완료")
             return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.warning(f"LLM 요약 실패, 기본 요약으로 대체: {e}")
+        logger.warning(f"❌ LLM 요약 실패, 기본 요약으로 대체: {e}")
     return None
 
 
