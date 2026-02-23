@@ -142,6 +142,54 @@ def fetch_article_fulltext(url):
         return ""
 
 
+# LLM 지원 설정
+try:
+    from google import genai
+    from config import GEMINI_API_KEY, OPENAI_API_KEY
+except ImportError:
+    GEMINI_API_KEY = ""
+    OPENAI_API_KEY = ""
+
+def generate_llm_summary(text, title=None):
+    """LLM을 사용하여 기사의 심층 핵심 요약을 생성합니다."""
+    prompt = f"""다음은 광고/마케팅 업계 기사 원문(또는 요약본)입니다.
+제목: {title if title else '없음'}
+원문:
+{text}
+
+이 기사를 바탕으로, 광고대행사 기획자(AE)나 마케터가 실무에 참고할 수 있도록 가장 중요한 핵심 내용과 시사점을 3~4문장으로 한국어로 심층 요약해주세요. 
+직역투가 아닌 자연스러운 비즈니스 한국어를 사용하고, 기사의 단순 요약을 넘어 '이것이 왜 중요한지(인사이트)'가 드러나도록 작성해주세요. 
+'-습니다/입니다' 체를 사용해주세요.
+"""
+    try:
+        # 1순위: Gemini
+        if GEMINI_API_KEY:
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
+            return response.text.strip()
+            
+        # 2순위: OpenAI (설치된 경우)
+        elif OPENAI_API_KEY:
+            import openai
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "당신은 시니어 광고 기획자이자 트렌드 분석가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.5
+            )
+            return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.warning(f"LLM 요약 실패, 기본 요약으로 대체: {e}")
+    return None
+
+
 # ──────────────────────────────────────────────
 # 상세 요약 생성
 # ──────────────────────────────────────────────
@@ -150,15 +198,21 @@ def create_improved_summary(item, fulltext):
     rss_summary = item.get("summary", "")
     
     if fulltext and len(fulltext) > 300:
-        source_text = fulltext[:1500]
+        source_text = fulltext[:2000]
     elif rss_summary and len(rss_summary) > 100:
         source_text = rss_summary
     else:
         source_text = f"{title}. {fulltext[:500]}" if fulltext else title
 
-    kr_text = translate(source_text)
+    # LLM 요약 시도
+    if GEMINI_API_KEY or OPENAI_API_KEY:
+        llm_summary = generate_llm_summary(source_text, title)
+        if llm_summary:
+            return llm_summary
 
-    # 한국어 잡음 제거
+    # LLM 실패 시 기존 룰 기반 요약 (Fallback)
+    kr_text = translate(source_text[:1500])
+
     noise_phrases = [
         "구독 전용", "뉴스레터 신청", "자리를 확보하세요", 
         "국가의 500주년에 대해 가질 수 있는 일반적인 질문에 대한 답변입니다", 
@@ -232,6 +286,7 @@ def relevance_score(item):
     score = sum(1 for kw in core_kw if kw in text)
     if item.get("type") == "academic": score += 3
     if "ai" in text or "gpt" in text or "generative" in text: score += 2
+    if item.get("region") == "kr": score += 2  # 국내 기사 가중치
     return score
 
 
@@ -241,15 +296,50 @@ def select_top_items(articles, papers):
     
     final_articles = []
     source_counts = {}
-    for a in articles_sorted:
+    
+    # 목표 기사 수: 12~15개
+    target_count = 12
+    kr_target = int(target_count * 0.3)  # 약 4개
+    
+    kr_articles = [a for a in articles_sorted if a.get("region") == "kr"]
+    global_articles = [a for a in articles_sorted if a.get("region") != "kr"]
+    
+    # 국내 기사 먼저 확보
+    for a in kr_articles:
         s = a.get("source", "unknown")
         if source_counts.get(s, 0) >= 3: continue
         final_articles.append(a)
         source_counts[s] = source_counts.get(s, 0) + 1
-        if len(final_articles) >= 12: break # 기사 수 조금 늘림
+        if len(final_articles) >= kr_target: break
         
+    # 나머지 해외 기사로 채움
+    for a in global_articles:
+        s = a.get("source", "unknown")
+        if source_counts.get(s, 0) >= 3: continue
+        final_articles.append(a)
+        source_counts[s] = source_counts.get(s, 0) + 1
+        if len(final_articles) >= target_count: break
+    
+    # 여전히 부족하면 국내로 변통 시도
+    if len(final_articles) < target_count:
+        for a in [art for art in kr_articles if art not in final_articles]:
+            final_articles.append(a)
+            if len(final_articles) >= target_count: break
+
+    # 관련도 순으로 재정렬
+    final_articles.sort(key=lambda x: -relevance_score(x))
     final_papers = papers_sorted[:8]
     return final_articles, final_papers
+
+
+def format_date_str(date_str):
+    if not date_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(date_str)
+        return dt.strftime("%Y-%m-%d")
+    except:
+        return date_str[:10]
 
 
 # ──────────────────────────────────────────────
@@ -286,7 +376,7 @@ def generate_report(articles, papers):
     report = f"""# 📢 주간 광고/미디어 심층 리포트
 
 > **발행일**: {now}
-> **주요 내용**: 업계 최신 뉴스 및 **핵심 학술 연구** 분석
+> **주요 내용**: 국내외 업계 최신 뉴스 및 **핵심 학술 연구** 심층 분석
 
 ---
 
@@ -308,8 +398,7 @@ def generate_report(articles, papers):
     report += "---\n\n"
 
 
-
-    report += "## 📰 업계 주요 트렌드 (Industry News)\n\n"
+    report += "## 📰 업계 주요 뉴스 (Industry Trends)\n\n"
     sorted_cats = sorted(categorized.keys(), key=lambda c: (c=="AI/자동화", len(categorized[c])), reverse=True)
     
     for cat in sorted_cats:
@@ -324,9 +413,11 @@ def generate_report(articles, papers):
             summary_kr = detail_map.get(item.get("title"), "")
             source = item.get("source", "")
             url = item.get("url", "")
+            pub_date = format_date_str(item.get("published_date"))
+            date_badge = f" `🗓️ {pub_date}`" if pub_date else ""
             
             report += f"**{title_kr}**\n"
-            report += f"*({source})*\n\n"
+            report += f"*({source}){date_badge}*\n\n"
             report += f"{summary_kr}\n\n"
             if url:
                 report += f"[🔗 기사 원문]({url})\n\n"
@@ -342,9 +433,11 @@ def generate_report(articles, papers):
             summary_kr = detail_map.get(p.get("title", ""), "")
             source = p.get("source", "Academic Source")
             url = p.get("url", "")
+            pub_date = format_date_str(p.get("published_date"))
+            date_badge = f" `🗓️ {pub_date}`" if pub_date else ""
             
             report += f"### {title_kr}\n"
-            report += f"*출처: {source}*\n\n"
+            report += f"*출처: {source}{date_badge}*\n\n"
             if summary_kr:
                 report += f"{summary_kr}\n\n"
             if url:
@@ -354,8 +447,8 @@ def generate_report(articles, papers):
         report += "> *이번 주 수집된 주요 학술 논문이 없습니다.*\n\n"
 
     report += f"""---
-> **[안내]** 본 보고서는 자동화된 시스템에 의해 수집 및 요약되었습니다. 상세한 내용은 반드시 원문을 참고하시기 바랍니다.
-> 생성 시간: {now}
+> **[안내]** 본 보고서는 자동화된 AI 파이프라인(LLM 기반 요약)에 의해 작성되었습니다. 상세 내용은 원문을 참고하시기 바랍니다.
+> 배포 시간: {now}
 """
     return report
 

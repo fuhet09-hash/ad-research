@@ -33,13 +33,26 @@ def get_today_report_path():
 # RSS 피드 소스 (광고/미디어 업계)
 # ──────────────────────────────────────────────
 RSS_FEEDS = {
+    # 🌍 해외 (Global)
     "AdAge": "https://adage.com/arc/outboundfeeds/rss/",
     "Adweek": "https://www.adweek.com/feed/",
-    "The Drum": "https://www.thedrum.com/feeds/all.xml",
+    "The Drum": "https://www.thedrum.com/search?refinementList%5Bcontent_type%5D%5B0%5D=article&query=marketing&format=rss", # 대체 URL 시도
     "Marketing Dive": "https://www.marketingdive.com/feeds/news/",
     "Digiday": "https://digiday.com/feed/",
-    "MediaPost": "https://www.mediapost.com/rss/publications/",
+    "MediaPost": "https://www.mediapost.com/rss/MediapostMediaDailyNews/", # 보다 안정적인 채널로 변경
+    
+    # 🇰🇷 국내 (Korea)
+    "매드타임스": "http://www.madtimes.org/rss/allArticle.xml", # (이후 collect_trends.py에서 헤더 추가로 해결)
+    "모비인사이드": "https://mobiinside.co.kr/feed/",
+    "블로터": "https://www.bloter.net/rss/allArticle.xml",
+    "아주경제(광고)": "https://www.ajunews.com/rss/040106",
 }
+
+# ──────────────────────────────────────────────
+# AI 분석 API 키 (택 1, 환경 변수)
+# ──────────────────────────────────────────────
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 # ──────────────────────────────────────────────
 # 학술 검색 키워드

@@ -50,7 +50,16 @@ def collect_rss_feeds(days_back=7):
     for source_name, feed_url in RSS_FEEDS.items():
         logger.info(f"[RSS] {source_name} 수집 중: {feed_url}")
         try:
-            feed = feedparser.parse(feed_url)
+            # 봇 차단을 막기 위해 requests로 먼저 가져와서 feedparser에 넘기기
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+            resp = requests.get(feed_url, headers=headers, timeout=15)
+            
+            # 응답이 성공적이면 파싱
+            if resp.status_code == 200:
+                feed = feedparser.parse(resp.content)
+            else:
+                # 우회 실패 시 기존 방식 시도
+                feed = feedparser.parse(feed_url)
 
             if feed.bozo and not feed.entries:
                 logger.warning(f"[RSS] {source_name} 파싱 실패: {feed.bozo_exception}")
@@ -84,12 +93,14 @@ def collect_rss_feeds(days_back=7):
                 import re
                 summary = re.sub(r"<[^>]+>", "", summary).strip()
 
-                if not title:
-                    continue
+                # 지역 판별 (간단 로직: 이름에 한글 포함 여부 또는 특정 소스명)
+                is_korean = any("\uac00" <= c <= "\ud7a3" for c in source_name)
+                region = "kr" if is_korean else "global"
 
                 articles.append({
                     "source": source_name,
                     "type": "industry",
+                    "region": region,
                     "title": title,
                     "url": link,
                     "summary": summary[:1000],  # 요약 길이 제한
