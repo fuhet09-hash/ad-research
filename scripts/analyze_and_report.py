@@ -171,10 +171,11 @@ def generate_llm_summary(text, title=None):
         if GEMINI_API_KEY:
             client = genai.Client(api_key=GEMINI_API_KEY)
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-1.5-flash',
                 contents=prompt
             )
             logger.info("✅ Gemini API 심층 요약 완료")
+            time.sleep(4) # Rate limit 방지 (15 RPM)
             return response.text.strip()
             
         # 2순위: OpenAI (설치된 경우)
@@ -191,6 +192,7 @@ def generate_llm_summary(text, title=None):
                 temperature=0.5
             )
             logger.info("✅ OpenAI API 심층 요약 완료")
+            time.sleep(1)
             return response.choices[0].message.content.strip()
     except Exception as e:
         logger.warning(f"❌ LLM 요약 실패, 기본 요약으로 대체: {e}")
